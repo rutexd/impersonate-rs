@@ -3,11 +3,11 @@ name = "impersonate-rs"
 version = "0.1.0"
 edition = "2021"
 description = "A Rust wrapper for curl-impersonate, providing browser fingerprinting capabilities."
-authors = ["Sisyphus <sisyphus@ohmyopencode.com>"]
+authors = ["Alexander Salas Bastidas <a.salas@ieee.org>"]
 license = "MIT"
 readme = "README.md"
-repository = "https://github.com/username/impersonate-rs"
-homepage = "https://github.com/username/impersonate-rs"
+repository = "https://github.com/ajsb85/impersonate-rs"
+homepage = "https://github.com/ajsb85/impersonate-rs"
 keywords = ["curl", "impersonate", "browser", "fingerprint", "tls"]
 categories = ["web-programming::http-client", "network-programming"]
 
