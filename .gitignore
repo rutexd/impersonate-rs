@@ -1,4 +1,5 @@
 /target
 /resources
+/venv
 **/*.rs.bk
 Cargo.lock
