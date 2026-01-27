@@ -1,39 +1,4 @@
-[package]
-name = "impersonate-rs"
-version = "0.1.1"
-edition = "2021"
-description = "A Rust wrapper for curl-impersonate, providing browser fingerprinting capabilities."
-authors = ["Alexander Salas Bastidas <a.salas@ieee.org>"]
-license = "MIT"
-readme = "README.md"
-repository = "https://github.com/ajsb85/impersonate-rs"
-homepage = "https://github.com/ajsb85/impersonate-rs"
-keywords = ["curl", "impersonate", "browser", "fingerprint", "tls"]
-categories = ["web-programming::http-client", "network-programming"]
-
-[dependencies]
-curl = "0.4"
-curl-sys = "0.4"
-thiserror = "1.0"
-libc = "0.2"
-tokio = { version = "1.0", features = ["full"] }
-serde = { version = "1.0", features = ["derive"] }
-serde_json = "1.0"
-log = "0.4"
-anyhow = "1.0"
-serde_urlencoded = "0.7.1"
-
-[dev-dependencies]
-tokio-test = "0.4"
-
-[[bin]]
-name = "impersonate"
-path = "src/bin/impersonate.rs"
-
-[features]
-default = []
-mock = []
-
-[dependencies.clap]
-version = "4.0"
-features = ["derive"]
+# Docs.rs build configuration
+[package.metadata.docs.rs]
+features = ["mock"]
+rustc-args = ["--cfg", "docsrs"]
