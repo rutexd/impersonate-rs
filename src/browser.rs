@@ -38,6 +38,7 @@ pub enum Browser {
     Firefox133,
     Firefox135,
     Firefox144,
+    Firefox145,
     Tor145,
 }
 
@@ -78,6 +79,7 @@ impl Browser {
             Browser::Firefox133 => "firefox133",
             Browser::Firefox135 => "firefox135",
             Browser::Firefox144 => "firefox144",
+            Browser::Firefox145 => "firefox145",
             Browser::Tor145 => "tor145",
         }
     }
@@ -126,6 +128,7 @@ impl FromStr for Browser {
             "firefox133" => Ok(Browser::Firefox133),
             "firefox135" => Ok(Browser::Firefox135),
             "firefox144" => Ok(Browser::Firefox144),
+            "firefox145" => Ok(Browser::Firefox145),
             "tor145" => Ok(Browser::Tor145),
             // Normalize aliases
             "chrome" => Ok(Browser::Chrome142),
@@ -135,7 +138,7 @@ impl FromStr for Browser {
             "safari_beta" => Ok(Browser::Safari2601),
             "safari_ios_beta" => Ok(Browser::Safari260Ios),
             "chrome_android" => Ok(Browser::Chrome131Android),
-            "firefox" => Ok(Browser::Firefox144),
+            "firefox" => Ok(Browser::Firefox145),
             "tor" => Ok(Browser::Tor145),
             _ => Err(ParseBrowserError(s.to_string())),
         }

@@ -144,6 +144,7 @@
 //!
 //! ## External Documentation
 //!
+//! - [Building libcurl (Advanced)](https://github.com/ajsb85/impersonate-rs/blob/main/docs/building_libcurl.md)
 //! - [Full Comparison vs Reqwest](https://github.com/ajsb85/impersonate-rs/blob/main/docs/vs_reqwest.md)
 //! - [WebSockets Status](https://github.com/ajsb85/impersonate-rs/blob/main/docs/websockets.md)
 

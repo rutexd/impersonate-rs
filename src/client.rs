@@ -489,9 +489,18 @@ impl Response {
     }
 
     /// Returns the response body as a String (UTF-8).
+    ///
+    /// Note: If the response is not valid UTF-8, this will return an error.
     pub fn text(&self) -> Result<String> {
         String::from_utf8(self.body.clone())
             .map_err(|e| Error::Impersonate(format!("UTF-8 Error: {}", e)))
+    }
+
+    /// Returns the response body as a String (lossy).
+    ///
+    /// This will replace invalid UTF-8 sequences with the replacement character ().
+    pub fn text_lossy(&self) -> std::borrow::Cow<'_, str> {
+        String::from_utf8_lossy(&self.body)
     }
 
     /// Deserializes the response body as JSON.
