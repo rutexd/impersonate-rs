@@ -23,6 +23,10 @@ tokio-test = "0.4"
 name = "impersonate"
 path = "src/bin/impersonate.rs"
 
+[features]
+default = []
+mock = []
+
 [dependencies.clap]
 version = "4.0"
 features = ["derive"]

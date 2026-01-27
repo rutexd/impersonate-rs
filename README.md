@@ -34,10 +34,22 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 ## CLI
 
-A CLI tool is included:
+A CLI tool is included.
+
+### Development (Mock Mode)
+
+If you don't have `libcurl-impersonate` installed, you can run the CLI in mock mode (skips actual impersonation logic but runs the request):
 
 ```bash
-cargo run --bin impersonate -- --url https://tls.browserleaks.com/json --impersonate chrome124
+cargo run --features mock --bin impersonate -- https://tls.browserleaks.com/json --impersonate chrome124
+```
+
+### Production
+
+With `libcurl-impersonate` installed:
+
+```bash
+cargo run --bin impersonate -- https://tls.browserleaks.com/json --impersonate chrome124
 ```
 
 ## Building

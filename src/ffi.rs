@@ -3,13 +3,13 @@
 use curl_sys::{CURLcode, CURL};
 use std::os::raw::{c_char, c_int};
 
+#[cfg(not(feature = "mock"))]
 extern "C" {
     /// The core impersonation function added by curl-impersonate.
     ///
     /// # Safety
     /// This function is unsafe because it modifies the internal state of the CURL handle
     /// based on C pointers.
-    #[cfg(not(test))]
     pub fn curl_easy_impersonate(
         curl: *mut CURL,
         target: *const c_char,
@@ -17,16 +17,14 @@ extern "C" {
     ) -> CURLcode;
 }
 
-#[cfg(test)]
-#[no_mangle]
-#[allow(non_snake_case, unused_variables)]
-pub unsafe extern "C" fn curl_easy_impersonate(
+#[cfg(feature = "mock")]
+#[allow(unused_variables)]
+pub unsafe fn curl_easy_impersonate(
     curl: *mut CURL,
     target: *const c_char,
     default_headers: c_int,
 ) -> CURLcode {
-    // Stub implementation for tests
-    println!("Called curl_easy_impersonate stub");
+    println!("[MOCK] curl_easy_impersonate called. Impersonation skipped.");
     curl_sys::CURLE_OK
 }
 
