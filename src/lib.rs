@@ -21,6 +21,9 @@ pub use fingerprint::{set_akamai_options, set_ja3_options};
 //!
 //! - [Quick Start](https://github.com/ajsb85/impersonate-rs/blob/main/docs/quickstart.md)
 //! - [Advanced Topics](https://github.com/ajsb85/impersonate-rs/blob/main/docs/advanced/overview.md)
+//! - [Cookies & Sessions](https://github.com/ajsb85/impersonate-rs/blob/main/docs/cookies.md)
+//! - [Async/Tokio Usage](https://github.com/ajsb85/impersonate-rs/blob/main/docs/asyncio.md)
+//! - [WebSockets (Status)](https://github.com/ajsb85/impersonate-rs/blob/main/docs/websockets.md)
 //! - [API Reference](https://github.com/ajsb85/impersonate-rs/blob/main/docs/api.md)
 //! - [Comparison vs Reqwest](https://github.com/ajsb85/impersonate-rs/blob/main/docs/vs_reqwest.md)
 //!
