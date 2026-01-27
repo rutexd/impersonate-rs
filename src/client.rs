@@ -8,6 +8,7 @@ use std::time::Duration;
 /// A synchronous HTTP client wrapper around `curl-impersonate`.
 ///
 /// Use `Client::builder()` to configure it.
+#[derive(Debug, Clone)]
 pub struct Client {
     impersonate: Option<Browser>,
     ja3: Option<String>,
@@ -73,7 +74,7 @@ impl Default for Client {
 }
 
 /// Builder for constructing a `Client`.
-#[derive(Default)]
+#[derive(Default, Debug, Clone)]
 pub struct ClientBuilder {
     client: Client,
 }
@@ -128,6 +129,7 @@ impl ClientBuilder {
 }
 
 /// Builder for constructing an HTTP request.
+#[derive(Debug)]
 pub struct RequestBuilder {
     url: String,
     method: String,
@@ -291,6 +293,17 @@ pub struct Response {
     body: Vec<u8>,
     headers: std::collections::HashMap<String, String>,
     url: String,
+}
+
+impl Clone for Response {
+    fn clone(&self) -> Self {
+        Self {
+            status_code: self.status_code,
+            body: self.body.clone(),
+            headers: self.headers.clone(),
+            url: self.url.clone(),
+        }
+    }
 }
 
 impl Response {
