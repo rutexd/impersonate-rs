@@ -38,16 +38,22 @@ pub const CURLOPT_HTTP2_WINDOW_UPDATE: c_int = 10008;
 pub const CURLOPT_HTTP2_STREAMS: c_int = 10000 + 1010;
 pub const CURLOPT_HTTP2_PSEUDO_HEADERS_ORDER: c_int = 10000 + 1005;
 pub const CURLOPT_SSL_SIG_HASH_ALGS: c_int = 10000 + 1001;
+pub const CURLOPT_SSL_ENABLE_ALPS: c_int = 1002;
 pub const CURLOPT_SSL_PERMUTE_EXTENSIONS: c_int = 1007;
 pub const CURLOPT_SSL_CERT_COMPRESSION: c_int = 10000 + 1003;
+pub const CURLOPT_SSL_ENABLE_TICKET: c_int = 1004;
 pub const CURLOPT_TLS_GREASE: c_int = 1011;
+
 pub const CURLOPT_TLS_EXTENSION_ORDER: c_int = 10000 + 1012;
 pub const CURLOPT_STREAM_WEIGHT: c_int = 239;
 pub const CURLOPT_STREAM_EXCLUSIVE: c_int = 1013;
+pub const CURLOPT_TLS_STATUS_REQUEST: c_int = 1016;
+pub const CURLOPT_TLS_SIGNED_CERT_TIMESTAMPS: c_int = 1015;
 pub const CURLOPT_TLS_DELEGATED_CREDENTIALS: c_int = 10000 + 1017;
 pub const CURLOPT_TLS_RECORD_SIZE_LIMIT: c_int = 1018;
 pub const CURLOPT_HTTP2_NO_PRIORITY: c_int = 1021;
 pub const CURLOPT_ECH: c_int = 10000 + 325;
+pub const CURLOPT_SSL_ENABLE_ALPN: c_int = 226;
 
 // Constants for behavior
 pub const CURL_HTTP_VERSION_2_0: c_int = 3;
