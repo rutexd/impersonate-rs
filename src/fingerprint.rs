@@ -152,7 +152,8 @@ fn set_option_str(easy: &mut Easy, opt: i32, val: &str) -> Result<()> {
 fn parse_ciphers(ciphers: &str) -> Result<String> {
     let mut names = Vec::new();
     for id_str in ciphers.split('-') {
-        let id = u16::from_str_radix(id_str, 10)
+        let id = id_str
+            .parse::<u16>()
             .or_else(|_| u16::from_str_radix(id_str, 16))
             .map_err(|_| Error::Impersonate(format!("Invalid cipher ID: {}", id_str)))?;
 
@@ -166,7 +167,8 @@ fn parse_ciphers(ciphers: &str) -> Result<String> {
 fn parse_curves(curves: &str) -> Result<String> {
     let mut names = Vec::new();
     for id_str in curves.split('-') {
-        let id = u16::from_str_radix(id_str, 10)
+        let id = id_str
+            .parse::<u16>()
             .or_else(|_| u16::from_str_radix(id_str, 16))
             .map_err(|_| Error::Impersonate(format!("Invalid curve ID: {}", id_str)))?;
 

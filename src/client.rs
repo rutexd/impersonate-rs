@@ -10,6 +10,9 @@ use std::time::Duration;
 /// Use `Client::builder()` to configure it.
 pub struct Client {
     impersonate: Option<Browser>,
+    ja3: Option<String>,
+    akamai: Option<String>,
+    permute_extensions: bool,
     default_headers: bool,
     verify: bool,
     timeout: Option<Duration>,
@@ -59,6 +62,9 @@ impl Default for Client {
     fn default() -> Self {
         Self {
             impersonate: None,
+            ja3: None,
+            akamai: None,
+            permute_extensions: true,
             default_headers: true,
             verify: true,
             timeout: Some(Duration::from_secs(30)),
@@ -67,22 +73,33 @@ impl Default for Client {
 }
 
 /// Builder for constructing a `Client`.
+#[derive(Default)]
 pub struct ClientBuilder {
     client: Client,
-}
-
-impl Default for ClientBuilder {
-    fn default() -> Self {
-        Self {
-            client: Client::default(),
-        }
-    }
 }
 
 impl ClientBuilder {
     /// Sets the browser profile to impersonate.
     pub fn impersonate(mut self, browser: Browser) -> Self {
         self.client.impersonate = Some(browser);
+        self
+    }
+
+    /// Sets the JA3 fingerprint string.
+    pub fn ja3(mut self, ja3: &str) -> Self {
+        self.client.ja3 = Some(ja3.to_string());
+        self
+    }
+
+    /// Sets the Akamai fingerprint string.
+    pub fn akamai(mut self, akamai: &str) -> Self {
+        self.client.akamai = Some(akamai.to_string());
+        self
+    }
+
+    /// Enables or disables TLS extension permutation (default: true).
+    pub fn permute_extensions(mut self, enable: bool) -> Self {
+        self.client.permute_extensions = enable;
         self
     }
 

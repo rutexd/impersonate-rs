@@ -19,6 +19,10 @@ extern "C" {
 
 #[cfg(feature = "mock")]
 #[allow(unused_variables)]
+/// Mock implementation of curl_easy_impersonate for testing.
+///
+/// # Safety
+/// This function is unsafe because it mimics the C FFI function signature.
 pub unsafe fn curl_easy_impersonate(
     curl: *mut CURL,
     target: *const c_char,
