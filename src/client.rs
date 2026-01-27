@@ -15,8 +15,10 @@ pub struct Client {
     akamai: Option<String>,
     permute_extensions: bool,
     default_headers: bool,
+    follow_redirects: bool,
     verify: bool,
     timeout: Option<Duration>,
+    proxy: Option<String>,
 }
 
 impl Client {
@@ -45,14 +47,29 @@ impl Client {
         let mut builder = RequestBuilder::new(url)
             .method(method)
             .default_headers(self.default_headers)
+            .follow_redirects(self.follow_redirects)
             .verify(self.verify);
 
         if let Some(browser) = self.impersonate {
             builder = builder.impersonate(browser);
         }
 
+        if let Some(ja3) = &self.ja3 {
+            builder = builder.ja3(ja3);
+        }
+
+        if let Some(akamai) = &self.akamai {
+            builder = builder.akamai(akamai);
+        }
+
+        builder = builder.permute_extensions(self.permute_extensions);
+
         if let Some(timeout) = self.timeout {
             builder = builder.timeout(timeout);
+        }
+
+        if let Some(proxy) = &self.proxy {
+            builder = builder.proxy(proxy);
         }
 
         builder
@@ -67,8 +84,10 @@ impl Default for Client {
             akamai: None,
             permute_extensions: true,
             default_headers: true,
+            follow_redirects: true,
             verify: true,
             timeout: Some(Duration::from_secs(30)),
+            proxy: None,
         }
     }
 }
@@ -110,6 +129,12 @@ impl ClientBuilder {
         self
     }
 
+    /// Sets whether to follow redirects (default: true).
+    pub fn follow_redirects(mut self, enable: bool) -> Self {
+        self.client.follow_redirects = enable;
+        self
+    }
+
     /// Enables or disables SSL verification (default: true).
     pub fn verify(mut self, verify: bool) -> Self {
         self.client.verify = verify;
@@ -119,6 +144,12 @@ impl ClientBuilder {
     /// Sets the request timeout.
     pub fn timeout(mut self, timeout: Duration) -> Self {
         self.client.timeout = Some(timeout);
+        self
+    }
+
+    /// Sets a proxy URL (e.g. "http://127.0.0.1:8080").
+    pub fn proxy(mut self, proxy: &str) -> Self {
+        self.client.proxy = Some(proxy.to_string());
         self
     }
 
@@ -136,9 +167,15 @@ pub struct RequestBuilder {
     headers: List,
     body: Option<Vec<u8>>,
     impersonate: Option<Browser>,
+    ja3: Option<String>,
+    akamai: Option<String>,
+    permute_extensions: bool,
     default_headers: bool,
+    follow_redirects: bool,
     verify: bool,
     timeout: Option<Duration>,
+    proxy: Option<String>,
+    auth: Option<(String, String)>,
 }
 
 impl RequestBuilder {
@@ -149,9 +186,15 @@ impl RequestBuilder {
             headers: List::new(),
             body: None,
             impersonate: None,
+            ja3: None,
+            akamai: None,
+            permute_extensions: true,
             default_headers: true,
+            follow_redirects: true,
             verify: true,
             timeout: None,
+            proxy: None,
+            auth: None,
         }
     }
 
@@ -174,14 +217,56 @@ impl RequestBuilder {
         self
     }
 
+    /// Sets the request body as JSON.
+    pub fn json<T: serde::Serialize>(mut self, data: &T) -> Result<Self> {
+        let body = serde_json::to_vec(data)?;
+        self.headers
+            .append("Content-Type: application/json")
+            .map_err(Error::Curl)?;
+        self.body = Some(body);
+        Ok(self)
+    }
+
+    /// Sets the request body as URL-encoded form data.
+    pub fn form<T: serde::Serialize>(mut self, data: &T) -> Result<Self> {
+        let body = serde_urlencoded::to_string(data)
+            .map_err(|e| Error::Io(std::io::Error::new(std::io::ErrorKind::InvalidInput, e)))?
+            .into_bytes();
+        self.headers
+            .append("Content-Type: application/x-www-form-urlencoded")
+            .map_err(Error::Curl)?;
+        self.body = Some(body);
+        Ok(self)
+    }
+
     /// Overrides the browser profile for this request.
     pub fn impersonate(mut self, browser: Browser) -> Self {
         self.impersonate = Some(browser);
         self
     }
 
+    pub fn ja3(mut self, ja3: &str) -> Self {
+        self.ja3 = Some(ja3.to_string());
+        self
+    }
+
+    pub fn akamai(mut self, akamai: &str) -> Self {
+        self.akamai = Some(akamai.to_string());
+        self
+    }
+
+    pub fn permute_extensions(mut self, enable: bool) -> Self {
+        self.permute_extensions = enable;
+        self
+    }
+
     pub fn default_headers(mut self, enable: bool) -> Self {
         self.default_headers = enable;
+        self
+    }
+
+    pub fn follow_redirects(mut self, enable: bool) -> Self {
+        self.follow_redirects = enable;
         self
     }
 
@@ -195,17 +280,47 @@ impl RequestBuilder {
         self
     }
 
+    pub fn proxy(mut self, proxy: &str) -> Self {
+        self.proxy = Some(proxy.to_string());
+        self
+    }
+
+    pub fn basic_auth(mut self, user: &str, pass: &str) -> Self {
+        self.auth = Some((user.to_string(), pass.to_string()));
+        self
+    }
+
     /// Sends the request and returns a Response.
     pub fn send(self) -> Result<Response> {
         let mut easy = Easy::new();
+        self.send_with_easy(&mut easy)
+    }
 
+    fn send_with_easy(self, easy: &mut Easy) -> Result<Response> {
         // Basic options
         easy.url(&self.url)?;
         easy.ssl_verify_peer(self.verify)?;
         easy.ssl_verify_host(self.verify)?;
+        easy.follow_location(self.follow_redirects)?;
 
         if let Some(timeout) = self.timeout {
             easy.timeout(timeout)?;
+        } else {
+            easy.timeout(Duration::from_secs(0))?;
+        }
+
+        if let Some(proxy) = &self.proxy {
+            easy.proxy(proxy)?;
+        } else {
+            easy.proxy("")?;
+        }
+
+        if let Some((user, pass)) = &self.auth {
+            easy.username(user)?;
+            easy.password(pass)?;
+        } else {
+            easy.username("")?;
+            easy.password("")?;
         }
 
         // Method and Body
@@ -232,8 +347,12 @@ impl RequestBuilder {
         // Headers
         easy.http_headers(self.headers)?;
 
-        // Impersonation
-        // IMPORTANT: Must be called before connection
+        // Impersonation Logic
+        // Priority:
+        // 1. Explicit JA3/Akamai (Custom)
+        // 2. Browser Profile (Preset)
+
+        // Important: Impersonate first if set, as it might reset some options
         if let Some(browser) = self.impersonate {
             let browser_str = CString::new(browser.as_str())
                 .map_err(|e| Error::Impersonate(format!("Invalid browser string: {}", e)))?;
@@ -254,6 +373,16 @@ impl RequestBuilder {
                     )));
                 }
             }
+        }
+
+        // Apply JA3 overrides if present
+        if let Some(ja3) = &self.ja3 {
+            crate::fingerprint::set_ja3_options(easy, ja3, self.permute_extensions)?;
+        }
+
+        // Apply Akamai overrides if present
+        if let Some(akamai) = &self.akamai {
+            crate::fingerprint::set_akamai_options(easy, akamai)?;
         }
 
         // Perform request and capture response
@@ -286,7 +415,54 @@ impl RequestBuilder {
     }
 }
 
+/// A Session that persists cookies across requests.
+pub struct Session {
+    client: Client,
+    easy: std::cell::RefCell<Easy>,
+}
+
+impl Session {
+    /// Creates a new Session with the given Client configuration.
+    pub fn new(client: Client) -> Self {
+        let mut easy = Easy::new();
+        // Enable cookie engine with in-memory storage
+        let _ = easy.cookie_file("");
+        Self {
+            client,
+            easy: std::cell::RefCell::new(easy),
+        }
+    }
+
+    /// Convenience method for GET requests.
+    pub fn get(&self, url: &str) -> Result<Response> {
+        self.request("GET", url)
+            .send_with_easy(&mut self.easy.borrow_mut())
+    }
+
+    /// Convenience method for POST requests.
+    pub fn post(&self, url: &str) -> Result<Response> {
+        self.request("POST", url)
+            .send_with_easy(&mut self.easy.borrow_mut())
+    }
+
+    /// Creates a RequestBuilder that will use this session's handle.
+    /// Note: The actual execution happens when you call `send_with_easy` manually currently,
+    /// or use the convenience methods above.
+    /// To allow builder pattern with Session, we need a SessionRequestBuilder.
+    /// For simplicity, we just reuse Client's builder but we need to execute it on *our* handle.
+    pub fn request(&self, method: &str, url: &str) -> RequestBuilder {
+        self.client.request(method, url)
+    }
+}
+
+impl Default for Session {
+    fn default() -> Self {
+        Self::new(Client::default())
+    }
+}
+
 /// HTTP Response object.
+
 #[derive(Debug)]
 pub struct Response {
     status_code: u32,
