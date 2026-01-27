@@ -2,6 +2,7 @@ use serde::{Deserialize, Serialize};
 use std::str::FromStr;
 use thiserror::Error;
 
+/// Supported browser profiles for impersonation.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Browser {
     Chrome99,
@@ -41,6 +42,7 @@ pub enum Browser {
 }
 
 impl Browser {
+    /// Returns the string representation expected by curl-impersonate.
     pub fn as_str(&self) -> &'static str {
         match self {
             Browser::Chrome99 => "chrome99",
@@ -81,6 +83,7 @@ impl Browser {
     }
 }
 
+/// Error returned when parsing a browser string fails.
 #[derive(Debug, Error)]
 #[error("Invalid browser type: {0}")]
 pub struct ParseBrowserError(String);
@@ -145,5 +148,11 @@ mod tests {
         assert_eq!(Browser::from_str("chrome100").unwrap(), Browser::Chrome100);
         assert_eq!(Browser::from_str("chrome").unwrap(), Browser::Chrome142);
         assert!(Browser::from_str("invalid").is_err());
+    }
+
+    #[test]
+    fn test_as_str() {
+        assert_eq!(Browser::Chrome99.as_str(), "chrome99");
+        assert_eq!(Browser::Tor145.as_str(), "tor145");
     }
 }
