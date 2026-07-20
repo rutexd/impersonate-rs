@@ -97,24 +97,47 @@ fn extract(archive: &Path, dest: &Path) {
 }
 
 fn emit_link_directives(impersonate_dir: &Path, target: &str) {
-    let is_windows = target.contains("windows");
+    let lib_dir = impersonate_dir.join("lib");
+    println!("cargo:rustc-link-search=native={}", lib_dir.display());
 
-    if is_windows {
-        let lib_dir = impersonate_dir.join("lib");
-        println!("cargo:rustc-link-search=native={}", lib_dir.display());
-
-        // Link the static lib which contains all curl symbols + curl_easy_impersonate.
-        // curl-sys embeds vanilla curl objects in its rlib, so we'll have duplicates.
-        // /WHOLEARCHIVE forces the linker to include all objects from the static lib.
-        // /FORCE:MULTIPLE suppresses the duplicate symbol errors.
+    if target.contains("msvc") {
+        // MSVC: /WHOLEARCHIVE forces all objects from the static lib into the binary.
+        // /FORCE:MULTIPLE allows duplicate symbols between curl-sys's vanilla curl
+        // (embedded in rlib) and our curl-impersonate static lib.
         let static_lib = lib_dir.join("libcurl-impersonate.lib");
         println!(
             "cargo:rustc-link-arg=/WHOLEARCHIVE:{}",
             static_lib.display()
         );
         println!("cargo:rustc-link-arg=/FORCE:MULTIPLE");
+    } else if target.contains("apple") {
+        // macOS: -force_load is the ld64 equivalent of --whole-archive.
+        // ld64 allows duplicate symbols by default (uses first definition).
+        let static_lib = lib_dir.join("libcurl-impersonate.a");
+        println!(
+            "cargo:rustc-link-arg=-Wl,-force_load,{}",
+            static_lib.display()
+        );
+    } else {
+        // Linux / other Unix: --whole-archive / --no-whole-archive pair.
+        // --allow-multiple-definition suppresses duplicate symbol errors from
+        // curl-sys's vanilla curl (in rlib) vs our curl-impersonate.
+        println!("cargo:rustc-link-arg=-Wl,--whole-archive");
+        println!("cargo:rustc-link-lib=curl-impersonate");
+        println!("cargo:rustc-link-arg=-Wl,--no-whole-archive");
+        println!("cargo:rustc-link-arg=-Wl,--allow-multiple-definition");
+    }
 
-        // Transitive dependencies.
+    emit_platform_deps(target);
+
+    if target.contains("windows") {
+        copy_windows_dlls(impersonate_dir);
+    }
+}
+
+fn emit_platform_deps(target: &str) {
+    if target.contains("windows") {
+        // Transitive dependencies for curl-impersonate on Windows.
         println!("cargo:rustc-link-lib=ssl");
         println!("cargo:rustc-link-lib=crypto");
         println!("cargo:rustc-link-lib=nghttp2");
@@ -131,10 +154,7 @@ fn emit_link_directives(impersonate_dir: &Path, target: &str) {
         println!("cargo:rustc-link-lib=normaliz");
         println!("cargo:rustc-link-lib=advapi32");
         println!("cargo:rustc-link-lib=wldap32");
-
-        copy_windows_dlls(impersonate_dir);
     } else {
-        println!("cargo:rustc-link-lib=static=curl-impersonate");
         println!("cargo:rustc-link-lib=z");
         println!("cargo:rustc-link-lib=pthread");
         println!("cargo:rustc-link-lib=dl");
