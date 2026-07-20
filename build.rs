@@ -22,8 +22,13 @@ fn main() {
         let archive_name = resolve_archive_name(&target);
         let extract_dir = out_dir.join("curl-impersonate");
 
-        if !extract_dir.join("lib").exists() && !extract_dir.join("libcurl-impersonate.a").exists()
-        {
+        let static_lib = if target.contains("windows") {
+            extract_dir.join("lib/libcurl-impersonate.lib")
+        } else {
+            extract_dir.join("lib/libcurl-impersonate.a")
+        };
+
+        if !static_lib.exists() {
             let url = format!(
                 "{}/{}/libcurl-impersonate-{}.{}.tar.gz",
                 GITHUB_RELEASE_URL, version, version, archive_name
@@ -50,9 +55,6 @@ fn main() {
 
         emit_link_directives(&extract_dir, &target);
 
-        // Download Mozilla CA bundle for SSL verification.
-        // BoringSSL (used by curl-impersonate) does not integrate with the
-        // Windows certificate store, so we ship our own CA bundle.
         download_cacert(&out_dir);
     }
 }
@@ -191,6 +193,9 @@ fn copy_windows_dlls(impersonate_dir: &Path) {
 
             if name_str.ends_with(".dll") {
                 let dest = target_dir.join(&name);
+                if dest.exists() {
+                    continue;
+                }
                 let _ = fs::copy(entry.path(), &dest);
                 println!("cargo:warning=Copied {} to {}", name_str, dest.display());
             }
