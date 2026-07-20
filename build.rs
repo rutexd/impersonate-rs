@@ -2,14 +2,11 @@ use std::env;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-const CURL_IMPERSONATE_VERSION: &str = "v1.5.6";
-const GITHUB_RELEASE_URL: &str =
-    "https://github.com/lexiforest/curl-impersonate/releases/download";
-const CACERT_URL: &str = "https://curl.se/ca/cacert.pem";
-
 fn main() {
     println!("cargo:rerun-if-changed=build.rs");
     println!("cargo:rerun-if-env-changed=CURL_IMPERSONATE_VERSION");
+    println!("cargo:rerun-if-env-changed=CURL_IMPERSONATE_GITHUB_URL");
+    println!("cargo:rerun-if-env-changed=CURL_IMPERSONATE_CACERT_URL");
 
     #[cfg(not(feature = "mock"))]
     {
@@ -17,7 +14,11 @@ fn main() {
         let out_dir = PathBuf::from(env::var_os("OUT_DIR").expect("OUT_DIR env var not set"));
 
         let version = env::var("CURL_IMPERSONATE_VERSION")
-            .unwrap_or_else(|_| CURL_IMPERSONATE_VERSION.to_string());
+            .unwrap_or_else(|_| "v1.5.6".into());
+        let github_url = env::var("CURL_IMPERSONATE_GITHUB_URL")
+            .unwrap_or_else(|_| "https://github.com/lexiforest/curl-impersonate/releases/download".into());
+        let cacert_url = env::var("CURL_IMPERSONATE_CACERT_URL")
+            .unwrap_or_else(|_| "https://curl.se/ca/cacert.pem".into());
 
         let archive_name = resolve_archive_name(&target);
         let extract_dir = out_dir.join("curl-impersonate");
@@ -31,7 +32,7 @@ fn main() {
         if !static_lib.exists() {
             let url = format!(
                 "{}/{}/libcurl-impersonate-{}.{}.tar.gz",
-                GITHUB_RELEASE_URL, version, version, archive_name
+                github_url, version, version, archive_name
             );
 
             println!(
@@ -55,7 +56,7 @@ fn main() {
 
         emit_link_directives(&extract_dir, &target);
 
-        download_cacert(&out_dir);
+        download_cacert(&out_dir, &cacert_url);
     }
 }
 
@@ -203,11 +204,11 @@ fn copy_windows_dlls(impersonate_dir: &Path) {
     }
 }
 
-fn download_cacert(out_dir: &Path) {
+fn download_cacert(out_dir: &Path, cacert_url: &str) {
     let cacert_path = out_dir.join("cacert.pem");
     if !cacert_path.exists() {
         println!("cargo:warning=Downloading Mozilla CA bundle (cacert.pem)...");
-        download(CACERT_URL, &cacert_path);
+        download(cacert_url, &cacert_path);
         println!(
             "cargo:warning=Downloaded cacert.pem ({} bytes)",
             fs::metadata(&cacert_path).map(|m| m.len()).unwrap_or(0)
