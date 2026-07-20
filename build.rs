@@ -105,36 +105,19 @@ fn extract(archive: &Path, dest: &Path) {
         .unwrap_or_else(|e| panic!("Failed to extract archive: {}", e));
 }
 
+
 fn emit_link_directives(impersonate_dir: &Path, target: &str) {
     let lib_dir = impersonate_dir.join("lib");
     println!("cargo:rustc-link-search=native={}", lib_dir.display());
 
     if target.contains("msvc") {
-        // MSVC: /WHOLEARCHIVE forces all objects from the static lib into the binary.
-        // /FORCE:MULTIPLE allows duplicate symbols between curl-sys's vanilla curl
-        // (embedded in rlib) and our curl-impersonate static lib.
-        let static_lib = lib_dir.join("libcurl-impersonate.lib");
-        println!(
-            "cargo:rustc-link-arg=/WHOLEARCHIVE:{}",
-            static_lib.display()
-        );
-        println!("cargo:rustc-link-arg=/FORCE:MULTIPLE");
+        println!("cargo:rustc-link-lib=static:+whole-archive,+verbatim=libcurl-impersonate.lib");
     } else if target.contains("apple") {
-        // macOS: -force_load is the ld64 equivalent of --whole-archive.
-        // ld64 allows duplicate symbols by default (uses first definition).
-        let static_lib = lib_dir.join("libcurl-impersonate.a");
-        println!(
-            "cargo:rustc-link-arg=-Wl,-force_load,{}",
-            static_lib.display()
-        );
+        // macOS: file is "libcurl-impersonate.a" — standard naming, no +verbatim needed.
+        println!("cargo:rustc-link-lib=static:+whole-archive=curl-impersonate");
     } else {
-        // Linux / other Unix: --whole-archive / --no-whole-archive pair.
-        // --allow-multiple-definition suppresses duplicate symbol errors from
-        // curl-sys's vanilla curl (in rlib) vs our curl-impersonate.
-        println!("cargo:rustc-link-arg=-Wl,--whole-archive");
-        println!("cargo:rustc-link-lib=curl-impersonate");
-        println!("cargo:rustc-link-arg=-Wl,--no-whole-archive");
-        println!("cargo:rustc-link-arg=-Wl,--allow-multiple-definition");
+        // Linux / other Unix: "libcurl-impersonate.a" — standard naming.
+        println!("cargo:rustc-link-lib=static:+whole-archive=curl-impersonate");
     }
 
     emit_platform_deps(target);
@@ -143,6 +126,9 @@ fn emit_link_directives(impersonate_dir: &Path, target: &str) {
         copy_windows_dlls(impersonate_dir);
     }
 }
+
+
+
 
 fn emit_platform_deps(target: &str) {
     if target.contains("windows") {
