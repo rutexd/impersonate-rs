@@ -128,7 +128,7 @@ fn set_option_long(easy: &mut Easy, opt: i32, val: i64) -> Result<()> {
         // Note: in C, it's varargs. In Rust bindings, we need to be careful.
         // curl-sys exposes curl_easy_setopt.
         // Cast opt to u32 (CURLoption is usually uint)
-        let code = curl_sys::curl_easy_setopt(raw, opt as u32, val);
+        let code = curl_sys::curl_easy_setopt(raw, opt, val);
         if code != curl_sys::CURLE_OK {
             return Err(Error::Curl(curl::Error::new(code)));
         }
@@ -141,7 +141,7 @@ fn set_option_str(easy: &mut Easy, opt: i32, val: &str) -> Result<()> {
     let c_str = std::ffi::CString::new(val)
         .map_err(|e| Error::Impersonate(format!("CString error: {}", e)))?;
     unsafe {
-        let code = curl_sys::curl_easy_setopt(raw, opt as u32, c_str.as_ptr());
+        let code = curl_sys::curl_easy_setopt(raw, opt, c_str.as_ptr());
         if code != curl_sys::CURLE_OK {
             return Err(Error::Curl(curl::Error::new(code)));
         }
