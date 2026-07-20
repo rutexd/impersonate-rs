@@ -362,6 +362,12 @@ impl RequestBuilder {
         // Headers
         easy.http_headers(self.headers)?;
 
+        // curl_easy_impersonate() sets Accept-Encoding as a raw HTTP header
+        // (CURLOPT_HTTPBASEHEADER), but curl only auto-decompresses when
+        // CURLOPT_ACCEPT_ENCODING is set. This is what curl_cffi does in
+        // set_curl_options() — it calls ACCEPT_ENCODING separately.
+        easy.accept_encoding("")?;
+
         // Impersonation Logic
         // Priority:
         // 1. Explicit JA3/Akamai (Custom)
