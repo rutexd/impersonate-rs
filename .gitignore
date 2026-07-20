@@ -3,3 +3,4 @@
 /venv
 **/*.rs.bk
 Cargo.lock
+examples/test_impersonate.rs
