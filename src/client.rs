@@ -5,6 +5,12 @@ use curl::easy::{Easy, List};
 use std::ffi::CString;
 use std::time::Duration;
 
+#[cfg(not(feature = "mock"))]
+mod ca {
+    pub static CACERT_PEM: &str =
+        include_str!(concat!(env!("OUT_DIR"), "/cacert.pem"));
+}
+
 /// A synchronous HTTP client wrapper around `curl-impersonate`.
 ///
 /// Use `Client::builder()` to configure it.
@@ -301,6 +307,15 @@ impl RequestBuilder {
         easy.url(&self.url)?;
         easy.ssl_verify_peer(self.verify)?;
         easy.ssl_verify_host(self.verify)?;
+
+        // BoringSSL (used by curl-impersonate) does not integrate with the
+        // Windows certificate store. Supply the bundled Mozilla CA certificates
+        // so that SSL verification works out of the box on Windows.
+        #[cfg(all(target_os = "windows", not(feature = "mock")))]
+        if self.verify {
+            easy.ssl_cainfo_blob(ca::CACERT_PEM.as_bytes())
+                .map_err(|e| Error::Curl(e))?;
+        }
         easy.follow_location(self.follow_redirects)?;
 
         if let Some(timeout) = self.timeout {

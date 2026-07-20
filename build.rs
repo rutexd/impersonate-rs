@@ -5,6 +5,7 @@ use std::path::{Path, PathBuf};
 const CURL_IMPERSONATE_VERSION: &str = "v1.5.6";
 const GITHUB_RELEASE_URL: &str =
     "https://github.com/lexiforest/curl-impersonate/releases/download";
+const CACERT_URL: &str = "https://curl.se/ca/cacert.pem";
 
 fn main() {
     println!("cargo:rerun-if-changed=build.rs");
@@ -48,6 +49,11 @@ fn main() {
         }
 
         emit_link_directives(&extract_dir, &target);
+
+        // Download Mozilla CA bundle for SSL verification.
+        // BoringSSL (used by curl-impersonate) does not integrate with the
+        // Windows certificate store, so we ship our own CA bundle.
+        download_cacert(&out_dir);
     }
 }
 
@@ -189,5 +195,17 @@ fn copy_windows_dlls(impersonate_dir: &Path) {
                 println!("cargo:warning=Copied {} to {}", name_str, dest.display());
             }
         }
+    }
+}
+
+fn download_cacert(out_dir: &Path) {
+    let cacert_path = out_dir.join("cacert.pem");
+    if !cacert_path.exists() {
+        println!("cargo:warning=Downloading Mozilla CA bundle (cacert.pem)...");
+        download(CACERT_URL, &cacert_path);
+        println!(
+            "cargo:warning=Downloaded cacert.pem ({} bytes)",
+            fs::metadata(&cacert_path).map(|m| m.len()).unwrap_or(0)
+        );
     }
 }
