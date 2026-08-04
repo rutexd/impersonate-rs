@@ -4,11 +4,20 @@ use crate::ffi;
 use curl::easy::{Easy, List};
 use std::ffi::CString;
 use std::time::Duration;
+use std::io::Read;
 
 #[cfg(not(feature = "mock"))]
 mod ca {
     pub static CACERT_PEM: &str =
         include_str!(concat!(env!("OUT_DIR"), "/cacert.pem"));
+}
+
+/// Request body variants for different upload strategies.
+enum Body {
+    /// Body stored in memory (for small payloads)
+    Buffer(Vec<u8>),
+    /// Body from a reader (for large files, streams data)
+    Stream(Box<dyn Read + Send>),
 }
 
 /// A synchronous HTTP client wrapper around `curl-impersonate`.
@@ -166,12 +175,11 @@ impl ClientBuilder {
 }
 
 /// Builder for constructing an HTTP request.
-#[derive(Debug)]
 pub struct RequestBuilder {
     url: String,
     method: String,
     headers: List,
-    body: Option<Vec<u8>>,
+    body: Option<Body>,
     impersonate: Option<Browser>,
     ja3: Option<String>,
     akamai: Option<String>,
@@ -219,7 +227,32 @@ impl RequestBuilder {
 
     /// Sets the request body.
     pub fn body<T: Into<Vec<u8>>>(mut self, body: T) -> Self {
-        self.body = Some(body.into());
+        self.body = Some(Body::Buffer(body.into()));
+        self
+    }
+
+    /// Sets the request body from a reader (for streaming large files).
+    /// 
+    /// This method allows uploading large files without loading them entirely into memory.
+    /// 
+    /// # Example
+    /// 
+    /// ```no_run
+    /// use impersonate_rs::{Client, Result};
+    /// use std::fs::File;
+    /// 
+    /// # fn main() -> Result<()> {
+    /// let client = Client::new();
+    /// let file = File::open("large_video.mp4").unwrap();
+    /// 
+    /// let response = client.post("https://example.com/upload")
+    ///     .body_reader(file)
+    ///     .send()?;
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn body_reader<R: Read + Send + 'static>(mut self, reader: R) -> Self {
+        self.body = Some(Body::Stream(Box::new(reader)));
         self
     }
 
@@ -229,7 +262,7 @@ impl RequestBuilder {
         self.headers
             .append("Content-Type: application/json")
             .map_err(Error::Curl)?;
-        self.body = Some(body);
+        self.body = Some(Body::Buffer(body));
         Ok(self)
     }
 
@@ -241,7 +274,7 @@ impl RequestBuilder {
         self.headers
             .append("Content-Type: application/x-www-form-urlencoded")
             .map_err(Error::Curl)?;
-        self.body = Some(body);
+        self.body = Some(Body::Buffer(body));
         Ok(self)
     }
 
@@ -297,12 +330,125 @@ impl RequestBuilder {
     }
 
     /// Sends the request and returns a Response.
+    /// 
+    /// # Examples
+    /// 
+    /// Basic usage (loads response into memory):
+    /// ```no_run
+    /// use impersonate_rs::{Client, Result};
+    /// 
+    /// fn main() -> Result<()> {
+    ///     let client = Client::new();
+    ///     let response = client.get("https://example.com").send()?;
+    ///     println!("{}", response.text()?);
+    ///     Ok(())
+    /// }
+    /// ```
+    /// 
+    /// Streaming large files:
+    /// ```no_run
+    /// use impersonate_rs::{Client, Result};
+    /// use std::fs::File;
+    /// use std::io::Write;
+    /// 
+    /// fn main() -> Result<()> {
+    ///     let client = Client::new();
+    ///     let mut file = File::create("download.bin").unwrap();
+    ///     
+    ///     let response = client.get("https://example.com/largefile.zip")
+    ///         .send_with_callback(|chunk| {
+    ///             file.write_all(chunk).unwrap();
+    ///             Ok(())
+    ///         })?;
+    ///     
+    ///     println!("Downloaded {} bytes", response.bytes_received());
+    ///     Ok(())
+    /// }
+    /// ```
     pub fn send(self) -> Result<Response> {
         let mut easy = Easy::new();
         self.send_with_easy(&mut easy)
     }
 
-    fn send_with_easy(self, easy: &mut Easy) -> Result<Response> {
+    /// Sends the request and streams the response body to a callback.
+    /// 
+    /// Returns `StreamResponse` which does not contain the body (since it was streamed).
+    /// Use this for downloading large files without loading them entirely into memory.
+    /// 
+    /// # Example
+    /// 
+    /// ```no_run
+    /// use impersonate_rs::{Client, Result};
+    /// use std::fs::File;
+    /// use std::io::Write;
+    /// 
+    /// fn main() -> Result<()> {
+    ///     let client = Client::new();
+    ///     let mut file = File::create("download.bin").unwrap();
+    ///     
+    ///     let response = client.get("https://example.com/largefile.zip")
+    ///         .send_with_callback(|chunk| {
+    ///             file.write_all(chunk).unwrap();
+    ///             Ok(())
+    ///         })?;
+    ///     
+    ///     println!("Status: {}, Downloaded: {} bytes", 
+    ///              response.status(), response.bytes_received());
+    ///     Ok(())
+    /// }
+    /// ```
+    pub fn send_with_callback<F>(self, mut callback: F) -> Result<StreamResponse>
+    where
+        F: FnMut(&[u8]) -> Result<()>,
+    {
+        let mut easy = Easy::new();
+        self.send_stream_with_easy(&mut easy, &mut callback)
+    }
+
+    /// Async version: Sends the request and streams the response body to a callback.
+    /// 
+    /// This spawns a blocking task to perform the streaming operation.
+    /// 
+    /// # Example
+    /// 
+    /// ```no_run
+    /// use impersonate_rs::{Client, Result};
+    /// use std::io::Write;
+    /// 
+    /// #[tokio::main]
+    /// async fn main() -> Result<()> {
+    ///     let client = Client::new();
+    ///     
+    ///     let response = client.get("https://example.com/largefile.zip")
+    ///         .send_with_callback_async(move |chunk| {
+    ///             // Note: This callback runs in a blocking context
+    ///             // For true async I/O, collect chunks and process them outside
+    ///             std::fs::OpenOptions::new()
+    ///                 .write(true)
+    ///                 .append(true)
+    ///                 .open("download.bin")
+    ///                 .unwrap()
+    ///                 .write_all(chunk)
+    ///                 .map_err(|e| impersonate_rs::Error::Io(e))?;
+    ///             Ok(())
+    ///         })
+    ///         .await?;
+    ///     
+    ///     println!("Downloaded {} bytes", response.bytes_received());
+    ///     Ok(())
+    /// }
+    /// ```
+    pub async fn send_with_callback_async<F>(self, callback: F) -> Result<StreamResponse>
+    where
+        F: FnMut(&[u8]) -> Result<()> + Send + 'static,
+    {
+        tokio::task::spawn_blocking(move || self.send_with_callback(callback))
+            .await
+            .map_err(|e| Error::Impersonate(format!("Task join error: {}", e)))?
+    }
+
+    // Common setup logic for both send methods
+    fn setup_easy(&self, easy: &mut Easy) -> Result<()> {
         // Basic options
         easy.url(&self.url)?;
         easy.ssl_verify_peer(self.verify)?;
@@ -338,29 +484,14 @@ impl RequestBuilder {
             easy.password("")?;
         }
 
-        // Method and Body
+        // Method
         match self.method.as_str() {
             "GET" => easy.get(true)?,
-            "POST" => {
-                easy.post(true)?;
-                if let Some(body) = &self.body {
-                    easy.post_field_size(body.len() as u64)?;
-                    easy.post_fields_copy(body)?;
-                }
-            }
-            "PUT" => {
-                easy.put(true)?;
-                if let Some(body) = &self.body {
-                    easy.post_field_size(body.len() as u64)?;
-                    easy.post_fields_copy(body)?;
-                }
-            }
+            "POST" => easy.post(true)?,
+            "PUT" => easy.put(true)?,
             "HEAD" => easy.nobody(true)?,
             m => easy.custom_request(m)?,
         }
-
-        // Headers
-        easy.http_headers(self.headers)?;
 
         // curl_easy_impersonate() sets Accept-Encoding as a raw HTTP header
         // (CURLOPT_HTTPBASEHEADER), but curl only auto-decompresses when
@@ -406,12 +537,32 @@ impl RequestBuilder {
             crate::fingerprint::set_akamai_options(easy, akamai)?;
         }
 
+        Ok(())
+    }
+
+    fn send_with_easy(mut self, easy: &mut Easy) -> Result<Response> {
+        self.setup_easy(easy)?;
+
+        // Headers (must be set after setup_easy because it consumes self.headers)
+        easy.http_headers(self.headers)?;
+
         // Perform request and capture response
         let mut response_body = Vec::new();
         let mut response_headers = Vec::new();
 
+        // Handle body upload - prepare before creating transfer
+        let body_opt = self.body.take();
+        
+        // Setup body before transfer if it's a buffer
+        if let Some(Body::Buffer(ref buf)) = body_opt {
+            easy.post_field_size(buf.len() as u64)?;
+            easy.post_fields_copy(buf)?;
+        }
+
         {
             let mut transfer = easy.transfer();
+            
+            // Setup write callback for response
             transfer.write_function(|data| {
                 response_body.extend_from_slice(data);
                 Ok(data.len())
@@ -421,6 +572,13 @@ impl RequestBuilder {
                 response_headers.extend_from_slice(header);
                 true
             })?;
+
+            // Setup read callback for request body (if streaming)
+            if let Some(Body::Stream(mut reader)) = body_opt {
+                transfer.read_function(move |buf| {
+                    reader.read(buf).map_err(|_| curl::easy::ReadError::Abort)
+                })?;
+            }
 
             transfer.perform()?;
         }
@@ -432,6 +590,65 @@ impl RequestBuilder {
             body: response_body,
             headers: parse_headers(&response_headers),
             url: self.url,
+        })
+    }
+
+    fn send_stream_with_easy<F>(mut self, easy: &mut Easy, callback: &mut F) -> Result<StreamResponse>
+    where
+        F: FnMut(&[u8]) -> Result<()>,
+    {
+        self.setup_easy(easy)?;
+
+        // Headers (must be set after setup_easy because it consumes self.headers)
+        easy.http_headers(self.headers)?;
+
+        // Perform streaming request
+        let mut response_headers = Vec::new();
+        let mut total_bytes: u64 = 0;
+
+        // Handle body upload - prepare before creating transfer
+        let body_opt = self.body.take();
+        
+        // Setup body before transfer if it's a buffer
+        if let Some(Body::Buffer(ref buf)) = body_opt {
+            easy.post_field_size(buf.len() as u64)?;
+            easy.post_fields_copy(buf)?;
+        }
+
+        {
+            let mut transfer = easy.transfer();
+            
+            // Setup write callback for streaming response
+            transfer.write_function(|data| {
+                total_bytes += data.len() as u64;
+                match callback(data) {
+                    Ok(()) => Ok(data.len()),
+                    Err(_) => Ok(0), // Signal error by returning 0
+                }
+            })?;
+
+            transfer.header_function(|header| {
+                response_headers.extend_from_slice(header);
+                true
+            })?;
+
+            // Setup read callback for request body (if streaming)
+            if let Some(Body::Stream(mut reader)) = body_opt {
+                transfer.read_function(move |buf| {
+                    reader.read(buf).map_err(|_| curl::easy::ReadError::Abort)
+                })?;
+            }
+
+            transfer.perform()?;
+        }
+
+        let status_code = easy.response_code()?;
+
+        Ok(StreamResponse {
+            status_code,
+            headers: parse_headers(&response_headers),
+            url: self.url,
+            bytes_received: total_bytes,
         })
     }
 }
@@ -542,6 +759,51 @@ impl Response {
     /// Returns the effective URL.
     pub fn url(&self) -> &str {
         &self.url
+    }
+}
+
+/// HTTP Streaming Response object.
+/// 
+/// Returned by `send_stream()` methods. Does not contain the body,
+/// as it was streamed to the callback.
+#[derive(Debug)]
+pub struct StreamResponse {
+    status_code: u32,
+    headers: std::collections::HashMap<String, String>,
+    url: String,
+    bytes_received: u64,
+}
+
+impl Clone for StreamResponse {
+    fn clone(&self) -> Self {
+        Self {
+            status_code: self.status_code,
+            headers: self.headers.clone(),
+            url: self.url.clone(),
+            bytes_received: self.bytes_received,
+        }
+    }
+}
+
+impl StreamResponse {
+    /// Returns the HTTP status code.
+    pub fn status(&self) -> u32 {
+        self.status_code
+    }
+
+    /// Returns the response headers.
+    pub fn headers(&self) -> &std::collections::HashMap<String, String> {
+        &self.headers
+    }
+
+    /// Returns the effective URL.
+    pub fn url(&self) -> &str {
+        &self.url
+    }
+
+    /// Returns the total number of bytes received.
+    pub fn bytes_received(&self) -> u64 {
+        self.bytes_received
     }
 }
 

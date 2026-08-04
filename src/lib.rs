@@ -100,6 +100,104 @@
 //! </details>
 //!
 //! <details>
+//! <summary><strong>Streaming Downloads</strong></summary>
+//!
+//! ### Synchronous Streaming
+//!
+//! For downloading large files without loading them entirely into memory:
+//!
+//! ```rust,no_run
+//! use impersonate_rs::{Client, Browser, Result};
+//! use std::fs::File;
+//! use std::io::Write;
+//!
+//! # fn main() -> Result<()> {
+//! let client = Client::builder()
+//!     .impersonate(Browser::Chrome124)
+//!     .build();
+//!
+//! let mut file = File::create("large_file.zip")
+//!     .map_err(|e| impersonate_rs::Error::Io(e))?;
+//!
+//! let response = client
+//!     .get("https://example.com/large_file.zip")
+//!     .send_with_callback(|chunk| {
+//!         file.write_all(chunk)
+//!             .map_err(|e| impersonate_rs::Error::Io(e))?;
+//!         Ok(())
+//!     })?;
+//!
+//! println!("Downloaded {} bytes", response.bytes_received());
+//! # Ok(())
+//! # }
+//! ```
+//!
+//! ### Async Streaming
+//!
+//! ```rust,no_run
+//! use impersonate_rs::{Client, Browser, Result};
+//! use std::sync::{Arc, Mutex};
+//! use std::fs::File;
+//! use std::io::Write;
+//!
+//! #[tokio::main]
+//! async fn main() -> Result<()> {
+//!     let client = Client::builder()
+//!         .impersonate(Browser::Chrome124)
+//!         .build();
+//!
+//!     let file = Arc::new(Mutex::new(
+//!         File::create("file.zip")
+//!             .map_err(|e| impersonate_rs::Error::Io(e))?
+//!     ));
+//!     let file_clone = file.clone();
+//!
+//!     let response = client
+//!         .get("https://example.com/file.zip")
+//!         .send_with_callback_async(move |chunk| {
+//!             file_clone.lock().unwrap()
+//!                 .write_all(chunk)
+//!                 .map_err(|e| impersonate_rs::Error::Io(e))?;
+//!             Ok(())
+//!         })
+//!         .await?;
+//!
+//!     println!("Downloaded {} bytes", response.bytes_received());
+//!     Ok(())
+//! }
+//! ```
+//! </details>
+//!
+//! <details>
+//! <summary><strong>Streaming Uploads</strong></summary>
+//!
+//! For uploading large files without loading them entirely into memory:
+//!
+//! ```rust,no_run
+//! use impersonate_rs::{Client, Browser, Result};
+//! use std::fs::File;
+//!
+//! # fn main() -> Result<()> {
+//! let client = Client::builder()
+//!     .impersonate(Browser::Chrome124)
+//!     .build();
+//!
+//! // Upload a large file without loading it into memory
+//! let file = File::open("large_video.mp4")
+//!     .map_err(|e| impersonate_rs::Error::Io(e))?;
+//!
+//! let response = client
+//!     .post("https://example.com/upload")
+//!     .body_reader(file)  // Streams the file in chunks
+//!     .send()?;
+//!
+//! println!("Upload status: {}", response.status());
+//! # Ok(())
+//! # }
+//! ```
+//! </details>
+//!
+//! <details>
 //! <summary><strong>Proxies & Auth</strong></summary>
 //!
 //! ### Proxies
@@ -155,6 +253,6 @@ pub mod ffi;
 pub mod fingerprint;
 
 pub use browser::Browser;
-pub use client::{Client, ClientBuilder, Response, Session};
+pub use client::{Client, ClientBuilder, RequestBuilder, Response, Session, StreamResponse};
 pub use error::{Error, Result};
 pub use fingerprint::{set_akamai_options, set_ja3_options};

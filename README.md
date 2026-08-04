@@ -64,6 +64,87 @@ fn main() -> Result<()> {
 }
 ```
 
+### Streaming Downloads (for Large Files)
+
+```rust
+use impersonate_rs::{Client, Browser, Result};
+use std::fs::File;
+use std::io::Write;
+
+fn main() -> Result<()> {
+    let client = Client::builder()
+        .impersonate(Browser::Chrome124)
+        .build();
+
+    let mut file = File::create("large_file.zip").unwrap();
+    
+    // Stream the response directly to a file without loading it into memory
+    let response = client
+        .get("https://example.com/large_file.zip")
+        .send_with_callback(|chunk| {
+            file.write_all(chunk).unwrap();
+            Ok(())
+        })?;
+
+    println!("Downloaded {} bytes", response.bytes_received());
+    Ok(())
+}
+```
+
+### Streaming Uploads (for Large Files)
+
+```rust
+use impersonate_rs::{Client, Browser, Result};
+use std::fs::File;
+
+fn main() -> Result<()> {
+    let client = Client::builder()
+        .impersonate(Browser::Chrome124)
+        .build();
+
+    // Upload a large file without loading it entirely into memory
+    let file = File::open("large_video.mp4").unwrap();
+    
+    let response = client
+        .post("https://example.com/upload")
+        .body_reader(file)  // Streams the file in chunks
+        .send()?;
+
+    println!("Upload status: {}", response.status());
+    Ok(())
+}
+```
+
+### Async Streaming Downloads
+
+```rust
+use impersonate_rs::{Client, Browser, Result};
+use std::sync::{Arc, Mutex};
+use std::fs::File;
+use std::io::Write;
+
+#[tokio::main]
+async fn main() -> Result<()> {
+    let client = Client::builder()
+        .impersonate(Browser::Chrome124)
+        .build();
+
+    let file = Arc::new(Mutex::new(File::create("file.zip").unwrap()));
+    let file_clone = file.clone();
+    
+    let response = client
+        .get("https://example.com/file.zip")
+        .send_with_callback_async(move |chunk| {
+            file_clone.lock().unwrap().write_all(chunk).unwrap();
+            Ok(())
+        })
+        .await?;
+
+    println!("Downloaded {} bytes", response.bytes_received());
+    Ok(())
+}
+```
+
 ### Custom JA3/Akamai Fingerprints
 
 For advanced users who need to rotate fingerprints dynamically or use custom signatures.
