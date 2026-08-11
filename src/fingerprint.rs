@@ -120,14 +120,13 @@ pub fn set_akamai_options(easy: &mut Easy, akamai: &str) -> Result<()> {
     Ok(())
 }
 
-fn set_option_long(easy: &mut Easy, opt: i32, val: i64) -> Result<()> {
+fn set_option_long(easy: &mut Easy, opt: curl_sys::CURLoption, val: i64) -> Result<()> {
     // curl-rs doesn't expose generic setopt_long, so we use the raw handle
     let raw = easy.raw();
     unsafe {
         // The signature for setopt with long is (handle, opt, long_value)
         // Note: in C, it's varargs. In Rust bindings, we need to be careful.
         // curl-sys exposes curl_easy_setopt.
-        // Cast opt to u32 (CURLoption is usually uint)
         let code = curl_sys::curl_easy_setopt(raw, opt, val);
         if code != curl_sys::CURLE_OK {
             return Err(Error::Curl(curl::Error::new(code)));
@@ -136,7 +135,7 @@ fn set_option_long(easy: &mut Easy, opt: i32, val: i64) -> Result<()> {
     Ok(())
 }
 
-fn set_option_str(easy: &mut Easy, opt: i32, val: &str) -> Result<()> {
+fn set_option_str(easy: &mut Easy, opt: curl_sys::CURLoption, val: &str) -> Result<()> {
     let raw = easy.raw();
     let c_str = std::ffi::CString::new(val)
         .map_err(|e| Error::Impersonate(format!("CString error: {}", e)))?;
