@@ -13,8 +13,12 @@ fn main() {
         let target = env::var("TARGET").expect("TARGET env var not set");
         let out_dir = PathBuf::from(env::var_os("OUT_DIR").expect("OUT_DIR env var not set"));
 
-        let version = env::var("CURL_IMPERSONATE_VERSION")
-            .unwrap_or_else(|_| "v1.5.6".into());
+        let version = match env::var("CURL_IMPERSONATE_VERSION") {
+            Ok(v) => v,
+            // Prebuilt FreeBSD binaries are only published since v2.0.0.
+            Err(_) if target.contains("freebsd") => "v2.1.0".into(),
+            Err(_) => "v1.5.6".into(),
+        };
         let github_url = env::var("CURL_IMPERSONATE_GITHUB_URL")
             .unwrap_or_else(|_| "https://github.com/lexiforest/curl-impersonate/releases/download".into());
         let cacert_url = env::var("CURL_IMPERSONATE_CACERT_URL")
@@ -22,14 +26,13 @@ fn main() {
 
         let archive_name = resolve_archive_name(&target);
         let extract_dir = out_dir.join("curl-impersonate");
-
-        let static_lib = if target.contains("windows") {
-            extract_dir.join("lib/libcurl-impersonate.lib")
+        let lib_name = if target.contains("windows") {
+            "libcurl-impersonate.lib"
         } else {
-            extract_dir.join("lib/libcurl-impersonate.a")
+            "libcurl-impersonate.a"
         };
 
-        if !static_lib.exists() {
+        if find_lib_dir(&extract_dir, lib_name).is_none() {
             let url = format!(
                 "{}/{}/libcurl-impersonate-{}.{}.tar.gz",
                 github_url, version, version, archive_name
@@ -71,10 +74,12 @@ fn resolve_archive_name(target: &str) -> String {
         "aarch64-unknown-linux-musl" => "aarch64-linux-musl".into(),
         "x86_64-apple-darwin" => "x86_64-macos".into(),
         "aarch64-apple-darwin" => "arm64-macos".into(),
+        "x86_64-unknown-freebsd" => "x86_64-freebsd".into(),
+        "aarch64-unknown-freebsd" => "aarch64-freebsd".into(),
         other => panic!(
             "Unsupported target: {}. Supported: x86_64/i686/aarch64-pc-windows-msvc, \
              x86_64/aarch64-unknown-linux-gnu, x86_64/aarch64-unknown-linux-musl, \
-             x86_64/aarch64-apple-darwin",
+             x86_64/aarch64-unknown-freebsd, x86_64/aarch64-apple-darwin",
             other
         ),
     }
@@ -106,17 +111,31 @@ fn extract(archive: &Path, dest: &Path) {
 }
 
 
+fn find_lib_dir(extract_dir: &Path, lib_name: &str) -> Option<PathBuf> {
+    if extract_dir.join(lib_name).exists() {
+        Some(extract_dir.to_path_buf())
+    } else if extract_dir.join("lib").join(lib_name).exists() {
+        Some(extract_dir.join("lib"))
+    } else {
+        None
+    }
+}
+
 fn emit_link_directives(impersonate_dir: &Path, target: &str) {
-    let lib_dir = impersonate_dir.join("lib");
+    let lib_name = if target.contains("windows") {
+        "libcurl-impersonate.lib"
+    } else {
+        "libcurl-impersonate.a"
+    };
+    let lib_dir = find_lib_dir(impersonate_dir, lib_name)
+        .expect("libcurl-impersonate archive not found after extraction");
     println!("cargo:rustc-link-search=native={}", lib_dir.display());
 
     if target.contains("msvc") {
         println!("cargo:rustc-link-lib=static:+whole-archive,+verbatim=libcurl-impersonate.lib");
-    } else if target.contains("apple") {
-        // macOS: file is "libcurl-impersonate.a" — standard naming, no +verbatim needed.
-        println!("cargo:rustc-link-lib=static:+whole-archive=curl-impersonate");
     } else {
-        // Linux / other Unix: "libcurl-impersonate.a" — standard naming.
+        // macOS / Linux / BSD: the archive is "libcurl-impersonate.a" — standard
+        // naming, no +verbatim needed.
         println!("cargo:rustc-link-lib=static:+whole-archive=curl-impersonate");
     }
 
@@ -149,6 +168,14 @@ fn emit_platform_deps(target: &str) {
         println!("cargo:rustc-link-lib=normaliz");
         println!("cargo:rustc-link-lib=advapi32");
         println!("cargo:rustc-link-lib=wldap32");
+    } else if target.contains("freebsd") {
+        // FreeBSD has no libdl (the dl* functions live in libc). The prebuilt
+        // archive is self-contained (BoringSSL, zlib, etc. statically linked),
+        // but needs the C++ runtime, threading, and the math library.
+        println!("cargo:rustc-link-lib=c++");
+        println!("cargo:rustc-link-lib=unwind");
+        println!("cargo:rustc-link-lib=pthread");
+        println!("cargo:rustc-link-lib=m");
     } else {
         println!("cargo:rustc-link-lib=z");
         println!("cargo:rustc-link-lib=pthread");
